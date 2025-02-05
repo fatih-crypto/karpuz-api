@@ -1,7 +1,7 @@
 // functions/api/analyze.js
 export async function onRequest(context) {
   const API_KEY = context.env.GEMINI_API_KEY;
-  const MODEL = 'gemini-2.0-flash-exp';
+  const MODEL = 'gemini-1.5-flash-8b';
   try {
     const requestData = await context.request.json();
     console.log('Request data:', requestData); // Debug log
