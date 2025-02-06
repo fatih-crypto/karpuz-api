@@ -2,13 +2,11 @@ export async function onRequest(context) {
   const API_KEY = context.env.GEMINI_API_KEY;
   const MODEL = 'gemini-1.5-flash-002';
   
-  // Retry configuration
   const MAX_RETRIES = 3;
-  const INITIAL_DELAY = 1000; // 1 second
+  const INITIAL_DELAY = 1000;
 
-  async function makeRequest(retryCount = 0) {
+  async function makeRequest(requestData, retryCount = 0) {
     try {
-      const requestData = await context.request.json();
       console.log('Request data:', requestData);
       const { image, prompt } = requestData;
       
@@ -38,12 +36,11 @@ export async function onRequest(context) {
       const geminiData = await geminiResponse.json();
       console.log('Gemini API response:', geminiData);
 
-      // Check for 503 error
       if (geminiResponse.status === 503 && retryCount < MAX_RETRIES) {
-        const delay = INITIAL_DELAY * Math.pow(2, retryCount); // Exponential backoff
+        const delay = INITIAL_DELAY * Math.pow(2, retryCount);
         console.log(`Retry attempt ${retryCount + 1} after ${delay}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
-        return makeRequest(retryCount + 1);
+        return makeRequest(requestData, retryCount + 1);
       }
 
       if (!geminiResponse.ok) {
@@ -70,7 +67,7 @@ export async function onRequest(context) {
         const delay = INITIAL_DELAY * Math.pow(2, retryCount);
         console.log(`Retry attempt ${retryCount + 1} after ${delay}ms due to error:`, error);
         await new Promise(resolve => setTimeout(resolve, delay));
-        return makeRequest(retryCount + 1);
+        return makeRequest(requestData, retryCount + 1);
       }
 
       console.error('API Error:', error);
@@ -89,5 +86,23 @@ export async function onRequest(context) {
     }
   }
 
-  return makeRequest();
+  try {
+    // Request body'yi bir kez okuyup saklıyoruz
+    const requestData = await context.request.json();
+    return makeRequest(requestData);
+  } catch (error) {
+    console.error('Request parsing error:', error);
+    return new Response(JSON.stringify({
+      error: 'Failed to parse request body',
+      has_watermelon: false,
+      count: 0,
+      watermelons: []
+    }), {
+      status: 400,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
 }
