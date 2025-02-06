@@ -1,112 +1,133 @@
-// functions/api/analyze.js
 export async function onRequest(context) {
   const API_KEY = context.env.GEMINI_API_KEY;
-  const MODEL = 'gemini-1.5-flash-002'; // Kullandığınız modele göre güncelleyebilirsiniz
-  const MAX_RETRIES = 3; // Yeniden deneme sayısı
-  let retries = 0;
+  const MODEL = 'gemini-1.5-flash-002';
+  
+  try {
+    console.log('=== Starting API request processing ===');
+    
+    // Request validation logs
+    const requestData = await context.request.json();
+    console.log('Incoming request data:', {
+      hasImage: !!requestData.image,
+      imageLength: requestData.image?.length,
+      promptLength: requestData.prompt?.length,
+      prompt: requestData.prompt?.substring(0, 100) + '...' // Log first 100 chars of prompt
+    });
 
-  while (retries < MAX_RETRIES) {
-    try {
-      const requestData = await context.request.json();
-      const { image, prompt } = requestData;
-
-      // İstek verilerini kontrol etme (gerekirse daha detaylı doğrulama ekleyebilirsiniz)
-      if (!image || !prompt) {
-        throw new Error("Eksik istek verisi: 'image' ve 'prompt' gereklidir.");
-      }
-
-      const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompt },
-                {
-                  inlineData: {
-                    mimeType: "image/jpeg", // Resmin base64 formatında olduğundan emin olun
-                    data: image
-                  }
-                }
-              ]
-            }]
-          })
-        }
+    const { image, prompt } = requestData;
+    
+    if (!image || !prompt) {
+      throw new Error('Missing required fields: ' + 
+        (!image ? 'image ' : '') + 
+        (!prompt ? 'prompt' : '')
       );
-
-      const geminiData = await geminiResponse.json();
-
-      if (!geminiResponse.ok) {
-        if (geminiResponse.status === 503) {  // 503 hatası için özel işlem
-          retries++;
-          const waitTime = 2 ** (retries - 1) * 1000; // Üstel geri çekilme
-          console.log(`Gemini API aşırı yüklendi. ${waitTime / 1000} saniye sonra tekrar deniyor...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime)); // Bekleme
-          continue; // Döngüyü tekrar başlat
-        } else {
-          // Diğer hatalar için daha detaylı bilgi ekleyerek hatayı fırlat
-          throw new Error(`Gemini API hatası: ${geminiResponse.status} - ${JSON.stringify(geminiData)}`);
-        }
-      }
-
-      // JSON ayrıştırma işlemini daha güvenli hale getirme
-      let result;
-      try {
-        const text = geminiData.candidates[0].content.parts[0].text;
-        const jsonMatch = text.match(/\{.*\}/s); // JSON objesini bul
-        if (!jsonMatch) {
-          throw new Error('Yanıtta JSON bulunamadı');
-        }
-        result = JSON.parse(jsonMatch[0]); // JSON'ı ayrıştır
-      } catch (jsonError) {
-        // JSON ayrıştırma hatası ve ham yanıtı içeren daha detaylı bir hata mesajı
-        throw new Error(`JSON ayrıştırma hatası: ${jsonError.message}. Ham Gemini yanıtı: ${JSON.stringify(geminiData)}`);
-      }
-
-      // Başarılı yanıt
-      return new Response(JSON.stringify(result), {
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://samsun-akilli-sehir.netlify.app', // İzin verilen kaynakları buraya ekleyin!
-        }
-      });
-
-    } catch (error) {
-      console.error('API Hatası:', error);
-
-      // Hata yanıtını daha bilgilendirici hale getirme
-      return new Response(JSON.stringify({
-        error: error.message,  // Detaylı hata mesajı
-        status: error.status || 500, // Hata kodu (varsa)
-        has_watermelon: false,
-        count: 0,
-        watermelons: []
-      }), {
-        status: error.status || 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://samsun-akilli-sehir.netlify.app', // İzin verilen kaynakları buraya ekleyin!
-        }
-      });
     }
+
+    // Pre-API call logging
+    console.log('Preparing Gemini API request for model:', MODEL);
+    
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: image
+                }
+              }
+            ]
+          }]
+        })
+      }
+    );
+
+    // API response validation logs
+    console.log('Gemini API response status:', geminiResponse.status);
+    console.log('Gemini API response headers:', Object.fromEntries(geminiResponse.headers));
+
+    const geminiData = await geminiResponse.json();
+    
+    // Detailed API response logging
+    console.log('Gemini API response structure:', {
+      hasCandidates: !!geminiData.candidates,
+      candidatesCount: geminiData.candidates?.length,
+      firstCandidateStructure: geminiData.candidates?.[0] ? 
+        Object.keys(geminiData.candidates[0]) : 'No candidates',
+      error: geminiData.error
+    });
+
+    if (!geminiResponse.ok) {
+      console.error('Gemini API error details:', {
+        status: geminiResponse.status,
+        statusText: geminiResponse.statusText,
+        error: geminiData.error,
+        rawResponse: geminiData
+      });
+      throw new Error(`Gemini API error: ${JSON.stringify(geminiData)}`);
+    }
+
+    const text = geminiData.candidates[0].content.parts[0].text;
+    console.log('Extracted text from response:', text.substring(0, 200) + '...'); // Log first 200 chars
+
+    const jsonMatch = text.match(/\{.*\}/s);
+    
+    if (!jsonMatch) {
+      console.error('JSON parsing error - Raw text received:', text);
+      throw new Error('No JSON found in response');
+    }
+
+    // Parse and validate result
+    const result = JSON.parse(jsonMatch[0]);
+    console.log('Parsed result structure:', {
+      hasWatermelon: result.has_watermelon,
+      count: result.count,
+      watermelonsCount: result.watermelons?.length
+    });
+
+    return new Response(JSON.stringify(result), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+
+  } catch (error) {
+    // Enhanced error logging
+    console.error('Detailed error information:', {
+      message: error.message,
+      stack: error.stack,
+      type: error.constructor.name,
+      // Additional context if available
+      cause: error.cause,
+      code: error.code
+    });
+
+    // Log the full error object for debugging
+    console.error('Full error object:', error);
+
+    return new Response(JSON.stringify({
+      error: error.message,
+      error_type: error.constructor.name,
+      error_details: error.stack,
+      has_watermelon: false,
+      count: 0,
+      watermelons: []
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } finally {
+    console.log('=== Request processing completed ===');
   }
-
-  // Tüm denemeler başarısız olursa
-  return new Response(JSON.stringify({
-    error: "Gemini API birden çok denemeden sonra kullanılamıyor.",
-    status: 503,
-    has_watermelon: false,
-    count: 0,
-    watermelons: []
-  }), {
-    status: 503,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': 'https://samsun-akilli-sehir.netlify.app', // İzin verilen kaynakları buraya ekleyin!
-    }
-  });
 }
