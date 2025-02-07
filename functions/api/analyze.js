@@ -1,15 +1,15 @@
-// functions/api/analyze.js
 export async function onRequest(context) {
   const API_KEY = context.env.GEMINI_API_KEY;
-  const MODEL = 'gemini-2.0-flash-lite-preview-02-05';
+  const MODEL = "gemini-2.0-flash";
+
   try {
     const requestData = await context.request.json();
-    console.log('Request data:', requestData); // Debug log
+    console.log('Request data:', requestData);
 
-    const { image, prompt } = requestData;
+    const { prompt } = requestData;
     
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${API_KEY}`,
       {
         method: 'POST',
         headers: {
@@ -18,13 +18,7 @@ export async function onRequest(context) {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: "image/jpeg",
-                  data: image
-                }
-              }
+              { text: prompt }
             ]
           }]
         })
@@ -32,33 +26,25 @@ export async function onRequest(context) {
     );
 
     const geminiData = await geminiResponse.json();
-    console.log('Gemini API response:', geminiData); // Debug log
+    console.log('Gemini API response:', geminiData);
     
     if (!geminiResponse.ok) {
       throw new Error(`Gemini API error: ${JSON.stringify(geminiData)}`);
     }
 
-    const text = geminiData.candidates[0].content.parts[0].text;
-    const jsonMatch = text.match(/\{.*\}/s);
-    
-    if (!jsonMatch) {
-      throw new Error('No JSON found in response');
-    }
+    const response = geminiData.candidates[0].content.parts[0].text;
 
-    const result = JSON.parse(jsonMatch[0]);
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ response }), {
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       }
     });
+
   } catch (error) {
-    console.error('API Error:', error); // Debug log
+    console.error('API Error:', error);
     return new Response(JSON.stringify({
-      error: error.message,
-      has_watermelon: false,
-      count: 0,
-      watermelons: []
+      error: error.message
     }), {
       status: 500,
       headers: {
