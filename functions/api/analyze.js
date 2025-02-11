@@ -1,7 +1,7 @@
 export async function onRequest(context) {
   const API_KEY = context.env.GEMINI_API_KEY;
   const SECRET_KEY = context.env.SECRET_KEY;
-  const MODEL = 'gemini-2.0-flash-lite-preview-02-05';
+  const MODEL = 'gemini-1.5-flash';
 
   try {
     // HMAC doğrulaması
