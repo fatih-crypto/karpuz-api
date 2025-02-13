@@ -15,7 +15,7 @@ export async function onRequest(context) {
     let usageData = await userLimits.get(userKey);
     usageData = usageData ? JSON.parse(usageData) : { count: 0 };
     
-    if (usageData.count >= 3) {  // Günlük 3 deneme hakkı
+    if (usageData.count >= 32) {  // Günlük 3 deneme hakkı
       return new Response(JSON.stringify({
         error: 'DAILY_LIMIT_EXCEEDED',
         message: 'Günlük deneme hakkınız doldu. Yarın tekrar deneyin.',
